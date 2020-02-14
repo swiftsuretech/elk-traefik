@@ -40,6 +40,9 @@ services:
         source: ./logstash/pipeline
         target: /usr/share/logstash/pipeline
         read_only: true
+      - type: bind
+        source: ./logstash/csv
+        target: /home/csv
     ports:
       - "5000:5000"
       - "9600:9600"
@@ -50,6 +53,24 @@ services:
     depends_on:
       - elasticsearch
 
+  reverse-proxy:
+    image: traefik:latest
+    container_name: "traefik"
+    command: 
+      - "--api.insecure=true" 
+      - "--providers.docker=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--providers.docker.exposedbydefault=true"    
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - elk
+ 
   kibana:
     build:
       context: kibana/
@@ -60,12 +81,21 @@ services:
         source: ./kibana/config/kibana.yml
         target: /usr/share/kibana/config/kibana.yml
         read_only: true
-    ports:
-      - "5601:5601"
+    #ports:
+    #  - "5601:5601"
     networks:
       - elk
     depends_on:
       - elasticsearch
+    labels:
+      - treafik.enable=true
+      - traefik.http.routers.kibana.rule=Host(`kibana.localhost`)
+      - traefik.http.routers.kibana.entrypoints=web
+      - traefik.http.middlewares.kibana.redirectscheme.scheme=https
+      - traefik.http.routers.kibana.middlewares=kibana
+      - traefik.http.routers.kibana_secure.entrypoints=websecure
+      - traefik.http.routers.kibana_secure.rule=Host(`kibana.localhost`)
+      - traefik.http.routers.kibana_secure.tls=true
 
 networks:
   elk:
